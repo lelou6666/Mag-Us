@@ -16,7 +16,7 @@ AMagUsAICharacter::AMagUsAICharacter(const FObjectInitializer& ObjectInitializer
 void AMagUsAICharacter::OnFire()
 {
 	// Get the right Spell to cast
-	TSubclassOf<class AMagUsProjectile> Spell = ProjectileArray[(int)EManaType::FIRE];
+	TSubclassOf<class AMagUsProjectile> Spell = ProjectileArray[(int)this->spellType];
 
 	// try and fire a projectile
 	if (Spell)
@@ -60,7 +60,7 @@ void AMagUsAICharacter::OnFire()
 
 void AMagUsAICharacter::ApplyDamageMomentum(float DamageTaken, FDamageEvent const& DamageEvent, APawn* PawnInstigator, AActor* DamageCauser)
 {
-	this->Health -= DamageTaken; // TODO : Calc DamageTaken
+	this->Health -= DamageTaken;
 
 	if (this->Health < 0)
 	{
@@ -78,4 +78,9 @@ void AMagUsAICharacter::BeginPlay()
 	// Change Speed of character
 	UCharacterMovementComponent*  CharacterMovement = GetCharacterMovement();
 	GetCharacterMovement()->MaxWalkSpeed = RealAttr->GetDefaultObject<UAttributes>()->Speed;
+}
+
+void AMagUsAICharacter::setSpellType(int32 newValue)
+{
+	this->spellType = (GestEnum)newValue;
 }

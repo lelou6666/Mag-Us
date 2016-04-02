@@ -36,7 +36,7 @@ AMagUsPlayerCharacter::AMagUsPlayerCharacter(const FObjectInitializer& ObjectIni
 	FirstPersonCameraComponent->bUsePawnControlRotation = true;
 
 	// Default offset from the character location for projectiles to spawn
-	ProjectileOffset = FVector(50.0f, 0.0f, 0.0f);
+	ProjectileOffset = FVector(60.0f, 0.0f, 0.0f);
 
 	/*// Create a mesh component that will be used when being viewed from a '1st person' view (when controlling this pawn)
 	Mesh1P = ObjectInitializer.CreateDefaultSubobject<USkeletalMeshComponent>(this, TEXT("CharacterMesh1P"));
@@ -52,6 +52,7 @@ AMagUsPlayerCharacter::AMagUsPlayerCharacter(const FObjectInitializer& ObjectIni
 
 	LockedActor = NULL;
 	bLockedPressed = false;
+	bShieldMode = false;
 	// Note: The ProjectileClass and the skeletal mesh/anim blueprints for Mesh1P are set in the
 	// derived blueprint asset named MyCharacter (to avoid direct content references in C++)
 
@@ -79,8 +80,9 @@ void AMagUsPlayerCharacter::SetupPlayerInputComponent(class UInputComponent* Inp
 	InputComponent->BindAction("Jump", IE_Pressed, this, &ACharacter::Jump);
 	InputComponent->BindAction("Jump", IE_Released, this, &ACharacter::StopJumping);
 
-	InputComponent->BindAction("Fire", IE_Pressed, this, &AMagUsPlayerCharacter::OnFire);
-	InputComponent->BindAction("Shield", IE_Pressed, this, &AMagUsPlayerCharacter::LaunchShield);
+	InputComponent->BindAction("Fire", IE_Pressed, this, &AMagUsPlayerCharacter::ShieldOrFire);
+	InputComponent->BindAction("Shield", IE_Pressed, this, &AMagUsPlayerCharacter::ShieldModeOn);
+	InputComponent->BindAction("Shield", IE_Released, this, &AMagUsPlayerCharacter::ShieldModeOff);
 
 	InputComponent->BindAction("Lock", IE_Pressed, this, &AMagUsPlayerCharacter::LockPressed);
 	InputComponent->BindAction("Lock", IE_Released, this, &AMagUsPlayerCharacter::LockReleased);
@@ -103,11 +105,16 @@ void AMagUsPlayerCharacter::SetupPlayerInputComponent(class UInputComponent* Inp
 
 void AMagUsPlayerCharacter::ApplyDamageMomentum(float DamageTaken, FDamageEvent const& DamageEvent, APawn* PawnInstigator, AActor* DamageCauser)
 {
-	if (GEngine)
-	{
-		//GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Red, TEXT("Player: " + FString::SanitizeFloat(DamageTaken) + " - " + FString::SanitizeFloat(Defense)));
-	}
 	Health -= DamageTaken; // TODO : Calc the DamageTaken
+}
+
+void AMagUsPlayerCharacter::ShieldOrFire() {
+	if (bShieldMode == false) {
+		OnFire();
+	}
+	else {
+		LaunchShield();
+	}
 }
 
 void AMagUsPlayerCharacter::OnFire()
@@ -131,6 +138,10 @@ void AMagUsPlayerCharacter::OnFire()
 
 		// SpawnOffset is in camera space, so transform it to world space before offsetting from the character location to find the final spawn position
 		const FVector SpawnLocation = GetActorLocation() + SpawnRotation.RotateVector(ProjectileOffset);
+		if (LockedActor == NULL && GEngine->IsStereoscopic3D()) {
+			AMagUsPlayerController* PC = Cast<AMagUsPlayerController>(GetController());
+			SpawnRotation = PC->PlayerCameraManager->GetActorForwardVector().Rotation();
+		}
 
 		// Set the instigator of the spell
 		FActorSpawnParameters SpawnParams;
@@ -140,7 +151,7 @@ void AMagUsPlayerCharacter::OnFire()
 		// Cast and spawn the spell
 		ManaPool->CastSpell(Spell);
 		AMagUsProjectile* Projectile = World->SpawnActor<AMagUsProjectile>(Spell, SpawnLocation, SpawnRotation, SpawnParams);
-		Projectile->SetDamage(RealAttr->GetDefaultObject<UAttributes>()->Strength); // For now, will be replaced by damage calc in Projectile
+		//Projectile->SetDamage(RealAttr->GetDefaultObject<UAttributes>()->Strength); // For now, will be replaced by damage calc in Projectile
 
 		// try and play the sound if specified
 		if (FireSound != NULL)
@@ -159,6 +170,14 @@ void AMagUsPlayerCharacter::OnFire()
 			}
 		}
 	}
+}
+
+void AMagUsPlayerCharacter::ShieldModeOn() {
+	bShieldMode = true;
+}
+
+void AMagUsPlayerCharacter::ShieldModeOff() {
+	bShieldMode = false;
 }
 
 void AMagUsPlayerCharacter::LaunchShield()
@@ -451,20 +470,11 @@ void AMagUsPlayerCharacter::InLock_Tick(float DeltaSeconds) {
 	}
 }
 
-void AMagUsPlayerCharacter::HUD_Tick(float DeltaSeconds) {
-	APlayerController* PC = Cast<APlayerController>(GetController());
-	FVector HandLocation = GetMesh()->GetBoneLocation(FName("hand_l"));
-	FVector ZAxis = GetMesh()->GetBoneAxis("hand_l", EAxis::Z);
-	//	GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Cyan, HandLocation.ToString());
-	Cast<AMagUsHUD>(PC->GetHUD())->SetVrManaPoolPositionRotation(HandLocation, ZAxis);
-}
-
 void AMagUsPlayerCharacter::Tick(float DeltaSeconds) {
 	Super::Tick(DeltaSeconds);
 	if (LockedActor != NULL) {
 		InLock_Tick(DeltaSeconds);
 	}
-	HUD_Tick(DeltaSeconds);
 }
 
 // Detect if out of camera view using angle && render time (* 2 for float margin of error)
@@ -524,25 +534,45 @@ GestEnum AMagUsPlayerCharacter::getGestureType(FString gest)
 		if (gest == "Circle")
 		{
 			this->spellType = GestEnum::CIRCLE;
-			this->OnFire();
+			if (bShieldMode == true) {
+				LaunchShield();
+			}
+			else {
+				this->OnFire();
+			}
 			return GestEnum::CIRCLE;
 		}
 		else if (gest == "KeyTap")
 		{
 			this->spellType = GestEnum::KEYTAP;
-			this->OnFire();
+			if (bShieldMode == true) {
+				LaunchShield();
+			}
+			else {
+				this->OnFire();
+			}
 			return GestEnum::KEYTAP;
 		}
 		else if (gest == "Swipe")
 		{
 			this->spellType = GestEnum::SWIPE;
-			this->OnFire();
+			if (bShieldMode == true) {
+				LaunchShield();
+			}
+			else {
+				this->OnFire();
+			}
 			return GestEnum::SWIPE;
 		}
 		else if (gest == "POISON")
 		{
 			this->spellType = GestEnum::LEFTHAND;
-			this->OnFire();
+			if (bShieldMode == true) {
+				LaunchShield();
+			}
+			else {
+				this->OnFire();
+			}
 			return GestEnum::LEFTHAND;
 		}
 		return (GestEnum::NONE);

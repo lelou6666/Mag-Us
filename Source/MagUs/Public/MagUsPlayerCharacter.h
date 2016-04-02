@@ -48,6 +48,7 @@ public:
 
 	clock_t last = clock();
 	bool canAttack;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category=SpellManagement)
 	GestEnum spellType;
 
 protected:
@@ -63,10 +64,15 @@ protected:
 
 	bool		bSignX; // true = negative
 
+	bool		bShieldMode;
+
 	/** Fires a projectile. */
+	void ShieldOrFire();
 	void OnFire();
 
 	/** Launch a shield. */
+	void ShieldModeOn();
+	void ShieldModeOff();
 	void LaunchShield();
 
 	/** Locks on enemy */
@@ -75,8 +81,6 @@ protected:
 	void OnLock();
 	void OffLock();
 	void InLock_Tick(float DeltaSeconds);
-
-	void HUD_Tick(float DeltaSeconds);
 
 	/** Get gesture type **/
 	UFUNCTION(BlueprintCallable, Category = "SpellManagement")
